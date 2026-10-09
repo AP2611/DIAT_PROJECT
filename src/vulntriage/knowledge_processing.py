@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import glob
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Iterable, Iterator
@@ -165,9 +167,11 @@ def iter_capec_documents(path: Path) -> Iterator[KnowledgeDocument]:
 
 
 def discover_raw_files(raw_dir: Path) -> dict[str, list[Path]]:
-    nvd = sorted(raw_dir.glob("**/nvdcve-2.0-*.json"))
-    cwe = sorted(raw_dir.glob("**/cwec_*.xml"))
-    capec = sorted(raw_dir.glob("**/capec_*.xml"))
+    import glob
+    raw_str = str(raw_dir)
+    nvd = sorted(Path(p) for p in glob.glob(os.path.join(raw_str, "**", "nvdcve-2.0-*.json"), recursive=True))
+    cwe = sorted(Path(p) for p in glob.glob(os.path.join(raw_str, "**", "cwec_*.xml"), recursive=True))
+    capec = sorted(Path(p) for p in glob.glob(os.path.join(raw_str, "**", "capec_*.xml"), recursive=True))
     return {"nvd": nvd, "cwe": cwe, "capec": capec}
 
 

@@ -212,7 +212,7 @@ def summarize_run(rows: list[dict[str, Any]], *, include_synthetic: bool = False
     calibration = {
         "brier": brier_score(y_true, p_vals) if y_true else None,
         **expected_calibration_error(y_true, p_vals),
-        **ranking_metrics(y_true, p_vals) if y_true else {"auroc": None, "auprc": None},
+        **(ranking_metrics(y_true, p_vals) if y_true else {"auroc": None, "auprc": None}),
         "interpretation": (
             "Scores are uncalibrated model p_vulnerable values. "
             "Post-hoc calibration must be fit on a validation split, never the test set."
