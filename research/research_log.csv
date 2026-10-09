@@ -1,0 +1,2 @@
+date,experiment_id,change_made,motivation,result,interpretation,next_step
+2026-10-09,setup,Created local prototype with four configs SQLite tracking and Vector RAG,Enable controlled experiments,Not yet run,Do not conclude before labelled runs,Import PrimeVul or another labelled dataset then run a seed-42 pilot of 20 samples per config

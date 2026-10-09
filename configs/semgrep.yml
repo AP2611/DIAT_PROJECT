@@ -1,0 +1,35 @@
+# Local smoke/pilot ruleset. Replace or extend via --semgrep-config.
+# This is not a complete security ruleset.
+
+rules:
+  - id: research.python.sql-injection-format
+    languages: [python]
+    severity: ERROR
+    message: Possible SQL injection via string formatting into a query.
+    metadata:
+      cwe: ["CWE-89"]
+    pattern-either:
+      - pattern: |
+          $QUERY = "..." % $X
+      - pattern: |
+          $QUERY = f"...{$X}..."
+      - pattern: |
+          $CUR.execute("..." % $X)
+      - pattern: |
+          $CUR.execute(f"...{$X}...")
+
+  - id: research.python.os-system
+    languages: [python]
+    severity: ERROR
+    message: Possible command injection via os.system.
+    metadata:
+      cwe: ["CWE-78"]
+    pattern: os.system($CMD)
+
+  - id: research.javascript.eval
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Use of eval may allow code injection.
+    metadata:
+      cwe: ["CWE-95"]
+    pattern: eval($X)

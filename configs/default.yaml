@@ -1,0 +1,40 @@
+project_name: vulntriage
+decision_threshold: 0.5
+prompt_version: v1
+
+paths:
+  raw_data_dir: data/raw
+  processed_dir: data/processed
+  benchmark_dir: data/benchmark
+  qdrant_path: data/qdrant
+  results_dir: results
+  sqlite_path: results/experiments.sqlite
+  research_dir: research
+
+ollama:
+  url: http://localhost:11434
+  model: mistral
+  temperature: 0
+  num_ctx: 8192
+  num_predict: 1024
+  timeout_seconds: 180
+  use_json_schema: true
+
+generation:
+  max_code_chars: 8000
+
+embeddings:
+  model_name: sentence-transformers/all-MiniLM-L6-v2
+  device: cpu
+  batch_size: 32
+  collection_name: security_knowledge
+  top_k: 5
+
+semgrep:
+  config: configs/semgrep.yml
+  timeout_seconds: 60
+
+benchmark:
+  default_limit: 20
+  default_seed: 42
+  cache_predictions: true

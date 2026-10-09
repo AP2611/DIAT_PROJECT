@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.env
+*.db
+.DS_Store
+
+# Generated artifacts — never commit processed knowledge or indexes
+data/processed/
+data/qdrant/
+results/exports/
+results/summaries/*.json
+results/summaries/*.csv
+results/*.sqlite
+
+# Raw NVD/CWE/CAPEC are linked from outside the repo
+data/raw/nvd
+data/raw/cwe
+data/raw/capec
