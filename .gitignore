@@ -8,6 +8,9 @@ __pycache__/
 *.db
 .DS_Store
 
+# PrimeVul dataset — do not commit downloaded data
+/PrimeVul_dataset/
+
 # Generated artifacts — never commit processed knowledge or indexes
 data/processed/
 data/qdrant/
