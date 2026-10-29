@@ -34,11 +34,17 @@ def detection_metrics(y_true: Sequence[int], y_pred: Sequence[int]) -> dict[str,
     recall = _safe_div(tp, tp + fn)
     specificity = _safe_div(tn, tn + fp)
     fpr = _safe_div(fp, fp + tn)
+    denom = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    mcc = _safe_div(tp * tn - fp * fn, denom)
+    if mcc is None and y_true:
+        mcc = 0.0  # constant predictions carry no correlation signal
     acc = _safe_div(tp + tn, tp + tn + fp + fn)
     f1 = None
     if precision is not None and recall is not None and (precision + recall) > 0:
         f1 = 2 * precision * recall / (precision + recall)
     elif precision is not None and recall is not None:
+        f1 = 0.0
+    elif y_true and tp == 0:
         f1 = 0.0
     tpr = recall
     tnr = specificity
@@ -57,6 +63,7 @@ def detection_metrics(y_true: Sequence[int], y_pred: Sequence[int]) -> dict[str,
         "balanced_accuracy": balanced,
         "specificity": specificity,
         "false_positive_rate": fpr,
+        "mcc": mcc,
     }
 
 
@@ -155,6 +162,35 @@ def ranking_metrics(y_true: Sequence[int], p_vuln: Sequence[float]) -> dict[str,
     return out
 
 
+def vd_s_metrics(
+    y_true: Sequence[int], p_vuln: Sequence[float], *, target_fpr: float = 0.005
+) -> dict[str, Any]:
+    """PrimeVul VD-S: FNR at the highest score threshold with FPR <= 0.5%.
+
+    Uses observed score thresholds (no interpolation). Small samples have coarse
+    FPR steps, so the achieved FPR is reported alongside the score.
+    """
+    if len(y_true) < 2 or len(set(int(v) for v in y_true)) < 2:
+        return {"vd_s": None, "target_fpr": target_fpr,
+                "note": "VD-S requires both vulnerable and benign samples"}
+    candidates = sorted({float(p) for p in p_vuln}, reverse=True)
+    # Include a threshold above the maximum, which represents predicting none.
+    candidates.insert(0, math.nextafter(max(candidates), math.inf))
+    valid = []
+    for threshold in candidates:
+        pred = [int(float(p) >= threshold) for p in p_vuln]
+        cm = confusion(y_true, pred)
+        fpr = _safe_div(cm["fp"], cm["fp"] + cm["tn"])
+        if fpr is not None and fpr <= target_fpr:
+            valid.append((fpr, threshold, cm))
+    # PrimeVul's reference implementation chooses the last ROC point under target.
+    achieved_fpr, threshold, cm = valid[-1]
+    fnr = _safe_div(cm["fn"], cm["fn"] + cm["tp"])
+    return {"vd_s": fnr, "target_fpr": target_fpr,
+            "achieved_fpr": achieved_fpr, "threshold": threshold,
+            "note": "Observed thresholds only; at n=10 the 0.5% FPR operating point is highly coarse."}
+
+
 def latency_stats(values: Sequence[float]) -> dict[str, float | None]:
     if not values:
         return {"n": 0, "mean": None, "median": None, "p50": None, "p90": None, "p95": None}
@@ -213,6 +249,7 @@ def summarize_run(rows: list[dict[str, Any]], *, include_synthetic: bool = False
         "brier": brier_score(y_true, p_vals) if y_true else None,
         **expected_calibration_error(y_true, p_vals),
         **(ranking_metrics(y_true, p_vals) if y_true else {"auroc": None, "auprc": None}),
+        "vd_s": vd_s_metrics(y_true, p_vals),
         "interpretation": (
             "Scores are uncalibrated model p_vulnerable values. "
             "Post-hoc calibration must be fit on a validation split, never the test set."
@@ -282,10 +319,12 @@ def comparison_table(summaries: dict[str, dict[str, Any]]) -> list[dict[str, Any
                 "balanced_accuracy": det.get("balanced_accuracy"),
                 "specificity": det.get("specificity"),
                 "false_positive_rate": det.get("false_positive_rate"),
+                "mcc": det.get("mcc"),
                 "brier": cal.get("brier"),
                 "ece": cal.get("ece"),
                 "auroc": cal.get("auroc"),
                 "auprc": cal.get("auprc"),
+                "vd_s": (cal.get("vd_s") or {}).get("vd_s"),
                 "mean_latency": (summary.get("latency") or {}).get("mean"),
                 "successful_inference_rate": summary.get("successful_inference_rate"),
                 "suitable_for_paper": summary.get("suitable_for_paper"),

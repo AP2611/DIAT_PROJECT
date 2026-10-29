@@ -1,0 +1,19 @@
+{
+  "dataset": "PrimeVul",
+  "release": "not specified in supplied files",
+  "split": "validation (primevul_valid_paired.jsonl)",
+  "selection": "deduplicated exact repeated idx+func records, then stratified random sample; 50/class",
+  "seed": 42,
+  "candidate_rows": 960,
+  "unique_rows": 956,
+  "duplicate_rows_excluded": 4,
+  "missing_or_blank_code_excluded": 0,
+  "selected": 100,
+  "class_counts": {
+    "vulnerable": 50,
+    "benign": 50
+  },
+  "manifest": "results/pilot/manifests/pilot_sample_manifest.csv",
+  "manifest_sha256": "7ad01897186e76337fc926d34eda080a0ead1dde23d049eba57f07f75ea38f16",
+  "note": "Manifest retains labels for evaluator only; keep separate from model-facing inputs. Pilot is exploratory and not representative of natural class distribution."
+}

@@ -27,6 +27,29 @@ def _as_cwe(value: Any) -> str | None:
     return text
 
 
+def _infer_language(record: dict[str, Any]) -> str | None:
+    """Use PrimeVul's file extension when its record omits an explicit language."""
+    explicit = record.get("language")
+    if explicit:
+        return str(explicit)
+    suffix = Path(str(record.get("file_name") or "")).suffix.lower()
+    return {
+        ".py": "python",
+        ".js": "javascript",
+        ".jsx": "javascript",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".c": "c",
+        ".h": "c",
+        ".cc": "cpp",
+        ".cpp": "cpp",
+        ".cxx": "cpp",
+        ".hpp": "cpp",
+        ".java": "java",
+        ".go": "go",
+    }.get(suffix)
+
+
 def detect_format(record: dict[str, Any]) -> str:
     keys = set(record.keys())
     if {"func", "target"} <= keys:
@@ -56,7 +79,7 @@ def from_primevul(record: dict[str, Any], *, split: str | None, source: str) -> 
         project_id=record.get("project") or record.get("project_id"),
         commit_hash=record.get("commit_id") or record.get("commit_hash"),
         split=split or record.get("split"),
-        language=record.get("language"),
+        language=_infer_language(record),
         file_name=record.get("file_name"),
         func_hash=str(func_hash) if func_hash is not None else None,
         is_synthetic=False,

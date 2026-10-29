@@ -61,6 +61,7 @@ def test_primevul_import(tmp_path: Path):
     assert vuln.commit_hash == "abc"
     assert "gets" in vuln.code
     assert vuln.source_dataset == "primevul"
+    assert vuln.language == "c"
 
 
 def test_canonical_roundtrip():

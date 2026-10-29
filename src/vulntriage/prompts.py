@@ -6,7 +6,7 @@ from vulntriage.schemas import (
     ScanResult,
 )
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 
 SYSTEM_PROMPT = """You are a software security analyst assisting a controlled research experiment.
 Determine whether the supplied source code is vulnerable.
@@ -103,8 +103,7 @@ def build_messages(
     language: str | None = None,
 ) -> list[dict[str, str]]:
     lang = language or "unknown"
-    user = f"""Configuration: {config_name}
-Language (if known): {lang}
+    user = f"""Language (if known): {lang}
 
 SOURCE CODE:
 ```

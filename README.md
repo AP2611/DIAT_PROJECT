@@ -6,19 +6,18 @@ Research prototype for a DRDO internship experiment:
 
 This repository is a **minimal, reproducible experiment harness**, not a production scanner and not a completed paper. Adding SAST or RAG is **not assumed to help**. Results must be measured.
 
-No labelled scientific benchmark has been executed in this repository yet. Do not treat synthetic smoke samples as evidence.
+An exploratory 10-sample PrimeVul test-split pilot was run on 2026-10-29. It is too small for scientific claims; see `paper_results/README.md` and `paper_results/metrics.json`. Do not treat synthetic smoke samples as evidence.
 
 ## What is already on this machine
 
 | Resource | Status |
 |---|---|
-| Git repo | Previously empty except a stub README |
-| Ollama | Installed (`/opt/homebrew/bin/ollama`, client 0.9.6). Daemon was **not running** at setup. Local models present: `mistral`, `llama3.2`, `llava`, `qwen2.5` |
+| Ollama | Local service responds; configured `mistral:latest` model is available. |
 | Default model | `mistral` (never auto-downloaded) |
-| Semgrep | **Not installed** |
+| Semgrep | Installed (1.180.0). The 10-sample pilot had scan errors on 3 samples (partial parses / syntax error); see `paper_results/metrics.json`. |
 | Embedding model | `sentence-transformers/all-MiniLM-L6-v2` already cached under `~/.cache/huggingface/hub` |
 | NVD / CWE / CAPEC | Present outside the repo; **not modified**. `data/raw/{nvd,cwe,capec}` are symlinks to `/Users/arjunpanse/Documents/security-knowledge-base/raw/...` |
-| PrimeVul / other labelled dataset | **Not present**. Import interface is implemented. |
+| PrimeVul | Official test split present at `PrimeVul_dataset/primevul_test.jsonl`; canonicalized copy used for the pilot is in `paper_results/`. |
 
 Raw files stay immutable. Generated artifacts go to `data/processed/`, `data/qdrant/`, and `results/`.
 
@@ -180,7 +179,7 @@ Duplicates are dropped; the import report includes class distribution, split cou
 
 SQLite at `results/experiments.sqlite` is the source of truth (CSV/JSONL export as well). Each run has a new `run_id`. Predictions are cached by sample + config + model + prompt version + generation settings + index/scanner versions. Previous rows are not overwritten.
 
-When labels exist, the harness computes precision, recall, F1, accuracy, balanced accuracy, specificity, FPR, confusion matrix, Brier, ECE (10 equal-width bins on `[0,1]`), reliability-diagram bins, AUROC/AUPRC when both classes are present, latency percentiles, and success / scanner / retrieval failure rates. Failed samples are kept.
+When labels exist, the harness computes precision, recall, F1, MCC, accuracy, balanced accuracy, specificity, FPR, confusion matrix, PrimeVul VD-S, Brier, ECE (10 equal-width bins on `[0,1]`), reliability-diagram bins, AUROC/AUPRC when both classes are present, latency percentiles, and success / scanner / retrieval failure rates. Failed samples are kept.
 
 `p_vulnerable` is evaluated as an **uncalibrated** score. Temperature scaling or other calibration belongs on a validation split in a later experiment, never on the final test set.
 
@@ -194,18 +193,15 @@ Core tests mock Ollama and do not need a running LLM or internet.
 
 ## Limitations (record these in the paper log)
 
-- No PrimeVul dump is in the workspace, so no scientific metrics exist yet.
-- Semgrep was not installed at prototype creation.
-- Ollama was installed but not serving at prototype creation.
+- The current PrimeVul results are a 10-sample pilot only; both tested configurations missed all 5 vulnerable samples. Do not use them to claim model performance.
+- LLM+SAST had Semgrep parsing errors on 3 of the 10 pilot functions. Failed scans are retained and are not treated as clean.
 - NVD overlap with benchmark CVE descriptions cannot be fully ruled out even with the CVE exclusion filter.
 - The bundled Semgrep YAML is a tiny research ruleset, not a production pack.
 - Hash embedder is for tests only.
 
-## Next steps for the first real pilot
+## Next steps after the 10-sample pilot
 
-1. `/opt/homebrew/bin/ollama serve` and `python -m vulntriage doctor`
-2. `python -m pip install semgrep` if you want SAST configs
-3. Download PrimeVul (or another labelled set) and `benchmark import`
-4. `knowledge normalize` then `knowledge build-index` (slow; NVD is large)
-5. `benchmark pilot --limit 20 --seed 42` then `benchmark run --config all --limit 20`
-6. Fill `research/observations_template.md` without claiming superiority
+1. Review `paper_results/README.md` and decide whether the 10-sample failure pattern justifies continuing.
+2. If continuing, inspect and address Semgrep parse failures and validate the LLM prompt / model scores before increasing the sample count.
+3. Run the next small chunk on the PrimeVul test split; keep the split and threshold fixed and record the chosen sample IDs.
+4. Fill `research/observations_template.md` without claiming superiority from pilot results.
