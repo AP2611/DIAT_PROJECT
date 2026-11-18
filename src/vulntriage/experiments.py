@@ -20,6 +20,29 @@ USES_SAST = {"llm_sast", "llm_sast_rag"}
 USES_RAG = {"llm_rag", "llm_sast_rag"}
 
 
+def detect_constant_predictions(records: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Detect if all successful predictions share the same p_vulnerable score.
+
+    Returns a diagnostic dict when constant scores are found, else None.
+    """
+    scores = [
+        r["p_vulnerable"]
+        for r in records
+        if r.get("status") == "success" and r.get("p_vulnerable") is not None
+    ]
+    if not scores:
+        return None
+    unique = set(scores)
+    if len(unique) == 1:
+        return {
+            "constant_score": scores[0],
+            "n_samples": len(scores),
+            "warning": "All successful predictions share the same p_vulnerable score; "
+            "the model is not discriminating between vulnerable and benign samples.",
+        }
+    return None
+
+
 @dataclass
 class ExperimentContext:
     config_name: str
@@ -31,6 +54,7 @@ class ExperimentContext:
     retrieve: Callable[[CanonicalSample], RetrievalResult] | None = None
     index_version: str | None = None
     embedding_model: str | None = None
+    prompt_version: str = PROMPT_VERSION
 
 
 def _now() -> str:
@@ -49,6 +73,7 @@ def run_sample(sample: CanonicalSample, ctx: ExperimentContext) -> dict[str, Any
                 sample.code,
                 config=ctx.semgrep_config,
                 language_hint=sample.language,
+                file_name=sample.file_name,
                 timeout_seconds=ctx.semgrep_timeout,
             )
     if ctx.config_name in USES_RAG:
@@ -89,7 +114,7 @@ def run_sample(sample: CanonicalSample, ctx: ExperimentContext) -> dict[str, Any
         code=sample.code,
         config_name=ctx.config_name,
         model_name=ctx.client.model,
-        prompt_version=PROMPT_VERSION,
+        prompt_version=ctx.prompt_version,
         generation_settings=generation_settings,
         embedding_model=ctx.embedding_model if ctx.config_name in USES_RAG else None,
         index_version=ctx.index_version if ctx.config_name in USES_RAG else None,
@@ -108,6 +133,11 @@ def run_sample(sample: CanonicalSample, ctx: ExperimentContext) -> dict[str, Any
         "prompt_json": json.dumps(
             [{"role": m["role"], "n_chars": len(m["content"])} for m in messages]
         ),
+        "ollama_model_requested": ctx.client.model,
+        "ollama_model_returned": None,
+        "ollama_http_status": None,
+        "ollama_parsing_status": None,
+        "decision_rule": f"p_vulnerable >= {ctx.decision_threshold} => vulnerable",
         "status": "error",
     }
     try:
@@ -118,6 +148,8 @@ def run_sample(sample: CanonicalSample, ctx: ExperimentContext) -> dict[str, Any
                 "ended_at": _now(),
                 "error": str(exc),
                 "raw_response": None,
+                "ollama_http_status": None,
+                "ollama_parsing_status": "request_failed",
                 "status": "error",
             }
         )
@@ -132,14 +164,22 @@ def run_sample(sample: CanonicalSample, ctx: ExperimentContext) -> dict[str, Any
     if response.parsed is None:
         record["error"] = f"invalid prediction JSON: {response.parse_error}"
         record["status"] = "error"
+        record["ollama_parsing_status"] = "invalid_json"
         return record
 
     derived = response.parsed.derived_label(ctx.decision_threshold)
     record.update(
         {
             "status": "success",
+            "ollama_model_returned": response.model,
+            "ollama_http_status": 200,
+            "ollama_parsing_status": "valid",
             "predicted_label": derived.value,
-            "model_predicted_label": response.parsed.predicted_label.value,
+            "model_predicted_label": (
+                response.parsed.predicted_label.value
+                if response.parsed.predicted_label is not None
+                else derived.value
+            ),
             "p_vulnerable": response.parsed.p_vulnerable,
             "decision_confidence": response.parsed.decision_confidence(),
             "predicted_cwe": response.parsed.cwe_id,

@@ -54,7 +54,10 @@ class CanonicalSample(BaseModel):
 class LLMPrediction(BaseModel):
     """Structured model output. Binary decision is derived from p_vulnerable."""
 
-    predicted_label: PredictedLabel
+    # Deprecated: the decision is derived from p_vulnerable, and the model is no
+    # longer asked to emit a label (it biased the probability toward 0.1/0.9).
+    # Kept optional for backwards compatibility with old cached predictions.
+    predicted_label: PredictedLabel | None = None
     p_vulnerable: float = Field(ge=0.0, le=1.0)
     cwe_id: str | None = None
     reasoning: str
@@ -171,7 +174,6 @@ class KnowledgeDocument(BaseModel):
 PREDICTION_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
-        "predicted_label": {"type": "string", "enum": ["vulnerable", "benign"]},
         "p_vulnerable": {"type": "number", "minimum": 0, "maximum": 1},
         "cwe_id": {"type": ["string", "null"]},
         "reasoning": {"type": "string"},
@@ -179,7 +181,6 @@ PREDICTION_JSON_SCHEMA: dict[str, Any] = {
         "limitations": {"type": "string"},
     },
     "required": [
-        "predicted_label",
         "p_vulnerable",
         "reasoning",
         "evidence",

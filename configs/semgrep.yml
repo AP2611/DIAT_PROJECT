@@ -1,35 +1,534 @@
-# Local smoke/pilot ruleset. Replace or extend via --semgrep-config.
-# This is not a complete security ruleset.
-
+# Research Semgrep ruleset for PrimeVul (C/C++) pilots.
+# Includes vetted Semgrep registry C rules (p/security-audit, retrieved 2026-11-18)
+# plus local high-signal patterns and the original Python/JS smoke rules.
+# This is still a research ruleset, not a production security pack.
 rules:
-  - id: research.python.sql-injection-format
-    languages: [python]
-    severity: ERROR
-    message: Possible SQL injection via string formatting into a query.
-    metadata:
-      cwe: ["CWE-89"]
-    pattern-either:
-      - pattern: |
-          $QUERY = "..." % $X
-      - pattern: |
-          $QUERY = f"...{$X}..."
-      - pattern: |
-          $CUR.execute("..." % $X)
-      - pattern: |
-          $CUR.execute(f"...{$X}...")
+- id: research.python.sql-injection-format
+  languages:
+  - python
+  severity: ERROR
+  message: Possible SQL injection via string formatting into a query.
+  metadata:
+    cwe:
+    - CWE-89
+  pattern-either:
+  - pattern: '$QUERY = "..." % $X
 
-  - id: research.python.os-system
-    languages: [python]
-    severity: ERROR
-    message: Possible command injection via os.system.
-    metadata:
-      cwe: ["CWE-78"]
-    pattern: os.system($CMD)
+      '
+  - pattern: '$QUERY = f"...{$X}..."
 
-  - id: research.javascript.eval
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: Use of eval may allow code injection.
-    metadata:
-      cwe: ["CWE-95"]
-    pattern: eval($X)
+      '
+  - pattern: '$CUR.execute("..." % $X)
+
+      '
+  - pattern: '$CUR.execute(f"...{$X}...")
+
+      '
+- id: research.python.os-system
+  languages:
+  - python
+  severity: ERROR
+  message: Possible command injection via os.system.
+  metadata:
+    cwe:
+    - CWE-78
+  pattern: os.system($CMD)
+- id: research.javascript.eval
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  message: Use of eval may allow code injection.
+  metadata:
+    cwe:
+    - CWE-95
+  pattern: eval($X)
+- id: c.lang.security.double-free.double-free
+  patterns:
+  - pattern-not: 'free($VAR);
+
+      ...
+
+      $VAR = NULL;
+
+      ...
+
+      free($VAR);
+
+      '
+  - pattern-not: 'free($VAR);
+
+      ...
+
+      $VAR = malloc(...);
+
+      ...
+
+      free($VAR);
+
+      '
+  - pattern-inside: 'free($VAR);
+
+      ...
+
+      $FREE($VAR);
+
+      '
+  - metavariable-pattern:
+      metavariable: $FREE
+      pattern: free
+  - focus-metavariable: $FREE
+  message: Variable '$VAR' was freed twice. This can lead to undefined behavior.
+  metadata:
+    cwe:
+    - 'CWE-415: Double Free'
+    owasp:
+    - A03:2021 - Injection
+    - A01:2017 - Injection
+    - A05:2025 - Injection
+    references:
+    - https://cwe.mitre.org/data/definitions/415.html
+    - https://owasp.org/www-community/vulnerabilities/Doubly_freeing_memory
+    category: security
+    technology:
+    - c
+    confidence: LOW
+    subcategory:
+    - vuln
+    likelihood: LOW
+    impact: HIGH
+    license: Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license
+    vulnerability_class:
+    - Memory Issues
+    source: https://semgrep.dev/r/c.lang.security.double-free.double-free
+    shortlink: https://sg.run/eLl0
+    semgrep.dev:
+      rule:
+        r_id: 8832
+        rv_id: 1262604
+        rule_id: JDUyw8
+        version_id: RGT0L3W
+        url: https://semgrep.dev/playground/r/RGT0L3W/c.lang.security.double-free.double-free
+        origin: community
+        path: c.lang.security.double-free.double-free
+  languages:
+  - c
+  - cpp
+  severity: ERROR
+- id: c.lang.security.insecure-use-gets-fn.insecure-use-gets-fn
+  pattern: gets(...)
+  message: Avoid 'gets()'. This function does not consider buffer boundaries and can
+    lead to buffer overflows. Use 'fgets()' or 'gets_s()' instead.
+  metadata:
+    cwe:
+    - 'CWE-676: Use of Potentially Dangerous Function'
+    references:
+    - https://us-cert.cisa.gov/bsi/articles/knowledge/coding-practices/fgets-and-gets_s
+    category: security
+    technology:
+    - c
+    confidence: MEDIUM
+    subcategory:
+    - audit
+    likelihood: LOW
+    impact: HIGH
+    license: Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license
+    vulnerability_class:
+    - Dangerous Method or Function
+    source: https://semgrep.dev/r/c.lang.security.insecure-use-gets-fn.insecure-use-gets-fn
+    shortlink: https://sg.run/dKqX
+    semgrep.dev:
+      rule:
+        r_id: 8834
+        rv_id: 945170
+        rule_id: GdU7OE
+        version_id: YDTvRlQ
+        url: https://semgrep.dev/playground/r/YDTvRlQ/c.lang.security.insecure-use-gets-fn.insecure-use-gets-fn
+        origin: community
+        path: c.lang.security.insecure-use-gets-fn.insecure-use-gets-fn
+  languages:
+  - c
+  - cpp
+  severity: ERROR
+- id: c.lang.security.insecure-use-printf-fn.insecure-use-printf-fn
+  message: Avoid using user-controlled format strings passed into 'sprintf', 'printf'
+    and 'vsprintf'. These functions put you at risk of buffer overflow vulnerabilities
+    through the use of format string exploits. Instead, use 'snprintf' and 'vsnprintf'.
+  metadata:
+    cwe:
+    - 'CWE-134: Use of Externally-Controlled Format String'
+    references:
+    - https://doc.castsoftware.com/display/SBX/Never+use+sprintf%28%29+or+vsprintf%28%29+functions
+    - https://www.cvedetails.com/cwe-details/134/Uncontrolled-Format-String.html
+    category: security
+    technology:
+    - c
+    confidence: LOW
+    subcategory:
+    - vuln
+    likelihood: MEDIUM
+    impact: HIGH
+    license: Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license
+    vulnerability_class:
+    - Improper Validation
+    source: https://semgrep.dev/r/c.lang.security.insecure-use-printf-fn.insecure-use-printf-fn
+    shortlink: https://sg.run/ZvJx
+    semgrep.dev:
+      rule:
+        r_id: 8835
+        rv_id: 945172
+        rule_id: ReUgWx
+        version_id: o5TZeB2
+        url: https://semgrep.dev/playground/r/o5TZeB2/c.lang.security.insecure-use-printf-fn.insecure-use-printf-fn
+        origin: community
+        path: c.lang.security.insecure-use-printf-fn.insecure-use-printf-fn
+  languages:
+  - c
+  - cpp
+  severity: WARNING
+  patterns:
+  - pattern-either:
+    - pattern: '$FUNC($BUFFER, argv[$NUM], ...);
+
+        ...
+
+        vsprintf(..., $BUFFER, ...);
+
+        '
+    - pattern: vsprintf(..., argv[$NUM], ...)
+    - pattern: '$FUNC($BUFFER, argv[$NUM], ...);
+
+        ...
+
+        sprintf(..., $BUFFER, ...);
+
+        '
+    - pattern: sprintf(...,argv[$NUM],...)
+    - pattern: '$FUNC($BUFFER, argv[$NUM], ...);
+
+        ...
+
+        printf(..., $BUFFER, ...);
+
+        '
+    - pattern: printf(...,argv[$NUM],...)
+  - metavariable-comparison:
+      metavariable: $NUM
+      comparison: int($NUM) > 0
+- id: c.lang.security.insecure-use-scanf-fn.insecure-use-scanf-fn
+  pattern: scanf(...)
+  message: Avoid using 'scanf()'. This function, when used improperly, does not consider
+    buffer boundaries and can lead to buffer overflows. Use 'fgets()' instead for
+    reading input.
+  metadata:
+    cwe:
+    - 'CWE-676: Use of Potentially Dangerous Function'
+    references:
+    - http://sekrit.de/webdocs/c/beginners-guide-away-from-scanf.html
+    category: security
+    technology:
+    - c
+    confidence: LOW
+    subcategory:
+    - audit
+    likelihood: LOW
+    impact: HIGH
+    license: Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license
+    vulnerability_class:
+    - Dangerous Method or Function
+    source: https://semgrep.dev/r/c.lang.security.insecure-use-scanf-fn.insecure-use-scanf-fn
+    shortlink: https://sg.run/nd1g
+    semgrep.dev:
+      rule:
+        r_id: 8836
+        rv_id: 945173
+        rule_id: AbUzPd
+        version_id: zyTlkWW
+        url: https://semgrep.dev/playground/r/zyTlkWW/c.lang.security.insecure-use-scanf-fn.insecure-use-scanf-fn
+        origin: community
+        path: c.lang.security.insecure-use-scanf-fn.insecure-use-scanf-fn
+  languages:
+  - c
+  - cpp
+  severity: WARNING
+- id: c.lang.security.insecure-use-strcat-fn.insecure-use-strcat-fn
+  pattern-either:
+  - pattern: strcat(...)
+  - pattern: strncat(...)
+  message: Finding triggers whenever there is a strcat or strncat used. This is an
+    issue because strcat or strncat can lead to buffer overflow vulns. Fix this by
+    using strcat_s instead.
+  metadata:
+    cwe:
+    - 'CWE-676: Use of Potentially Dangerous Function'
+    references:
+    - https://nvd.nist.gov/vuln/detail/CVE-2019-12553
+    - https://techblog.mediaservice.net/2020/04/cve-2020-2851-stack-based-buffer-overflow-in-cde-libdtsvc/
+    category: security
+    technology:
+    - c
+    confidence: LOW
+    subcategory:
+    - audit
+    likelihood: LOW
+    impact: HIGH
+    license: Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license
+    vulnerability_class:
+    - Dangerous Method or Function
+    source: https://semgrep.dev/r/c.lang.security.insecure-use-strcat-fn.insecure-use-strcat-fn
+    shortlink: https://sg.run/EkRP
+    semgrep.dev:
+      rule:
+        r_id: 8837
+        rv_id: 945174
+        rule_id: BYUNjA
+        version_id: pZTNOXb
+        url: https://semgrep.dev/playground/r/pZTNOXb/c.lang.security.insecure-use-strcat-fn.insecure-use-strcat-fn
+        origin: community
+        path: c.lang.security.insecure-use-strcat-fn.insecure-use-strcat-fn
+  languages:
+  - c
+  - cpp
+  severity: WARNING
+- id: c.lang.security.insecure-use-string-copy-fn.insecure-use-string-copy-fn
+  pattern-either:
+  - pattern: strcpy(...)
+  - pattern: strncpy(...)
+  message: Finding triggers whenever there is a strcpy or strncpy used. This is an
+    issue because strcpy does not affirm the size of the destination array and strncpy
+    will not automatically NULL-terminate strings. This can lead to buffer overflows,
+    which can cause program crashes and potentially let an attacker inject code in
+    the program. Fix this by using strcpy_s instead (although note that strcpy_s is
+    an optional part of the C11 standard, and so may not be available).
+  metadata:
+    cwe:
+    - 'CWE-676: Use of Potentially Dangerous Function'
+    references:
+    - https://cwe.mitre.org/data/definitions/676
+    - https://nvd.nist.gov/vuln/detail/CVE-2019-11365
+    category: security
+    technology:
+    - c
+    confidence: LOW
+    subcategory:
+    - audit
+    likelihood: LOW
+    impact: HIGH
+    license: Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license
+    vulnerability_class:
+    - Dangerous Method or Function
+    source: https://semgrep.dev/r/c.lang.security.insecure-use-string-copy-fn.insecure-use-string-copy-fn
+    shortlink: https://sg.run/7oNk
+    semgrep.dev:
+      rule:
+        r_id: 8838
+        rv_id: 945175
+        rule_id: DbUpo5
+        version_id: 2KTYb7Y
+        url: https://semgrep.dev/playground/r/2KTYb7Y/c.lang.security.insecure-use-string-copy-fn.insecure-use-string-copy-fn
+        origin: community
+        path: c.lang.security.insecure-use-string-copy-fn.insecure-use-string-copy-fn
+  languages:
+  - c
+  - cpp
+  severity: WARNING
+- id: c.lang.security.insecure-use-strtok-fn.insecure-use-strtok-fn
+  pattern: strtok(...)
+  message: Avoid using 'strtok()'. This function directly modifies the first argument
+    buffer, permanently erasing the delimiter character. Use 'strtok_r()' instead.
+  metadata:
+    cwe:
+    - 'CWE-676: Use of Potentially Dangerous Function'
+    references:
+    - https://wiki.sei.cmu.edu/confluence/display/c/STR06-C.+Do+not+assume+that+strtok%28%29+leaves+the+parse+string+unchanged
+    - https://man7.org/linux/man-pages/man3/strtok.3.html#BUGS
+    - https://stackoverflow.com/a/40335556
+    category: security
+    technology:
+    - c
+    confidence: LOW
+    subcategory:
+    - audit
+    likelihood: LOW
+    impact: HIGH
+    license: Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license
+    vulnerability_class:
+    - Dangerous Method or Function
+    source: https://semgrep.dev/r/c.lang.security.insecure-use-strtok-fn.insecure-use-strtok-fn
+    shortlink: https://sg.run/LwqG
+    semgrep.dev:
+      rule:
+        r_id: 8839
+        rv_id: 1028278
+        rule_id: WAUo5v
+        version_id: qkTx1oq
+        url: https://semgrep.dev/playground/r/qkTx1oq/c.lang.security.insecure-use-strtok-fn.insecure-use-strtok-fn
+        origin: community
+        path: c.lang.security.insecure-use-strtok-fn.insecure-use-strtok-fn
+  languages:
+  - c
+  - cpp
+  severity: WARNING
+- id: c.lang.security.random-fd-exhaustion.random-fd-exhaustion
+  pattern-either:
+  - patterns:
+    - pattern: '$FD = open("/dev/urandom", ...);
+
+        ...
+
+        read($FD, ...);
+
+        '
+    - pattern-not: '$FD = open("/dev/urandom", ...);
+
+        ...
+
+        $BYTES_READ = read($FD, ...);
+
+        '
+  - patterns:
+    - pattern: '$FD = open("/dev/random", ...);
+
+        ...
+
+        read($FD, ...);
+
+        '
+    - pattern-not: '$FD = open("/dev/random", ...);
+
+        ...
+
+        $BYTES_READ = read($FD, ...);
+
+        '
+  message: Call to 'read()' without error checking is susceptible to file descriptor
+    exhaustion. Consider using the 'getrandom()' function.
+  metadata:
+    cwe:
+    - 'CWE-774: Allocation of File Descriptors or Handles Without Limits or Throttling'
+    references:
+    - https://lwn.net/Articles/606141/
+    category: security
+    technology:
+    - c
+    confidence: MEDIUM
+    subcategory:
+    - audit
+    likelihood: LOW
+    impact: HIGH
+    license: Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license
+    vulnerability_class:
+    - Denial-of-Service (DoS)
+    source: https://semgrep.dev/r/c.lang.security.random-fd-exhaustion.random-fd-exhaustion
+    shortlink: https://sg.run/8yNj
+    semgrep.dev:
+      rule:
+        r_id: 8840
+        rv_id: 945177
+        rule_id: 0oU5k4
+        version_id: jQTzvry
+        url: https://semgrep.dev/playground/r/jQTzvry/c.lang.security.random-fd-exhaustion.random-fd-exhaustion
+        origin: community
+        path: c.lang.security.random-fd-exhaustion.random-fd-exhaustion
+  languages:
+  - c
+  - cpp
+  severity: WARNING
+- id: c.lang.security.use-after-free.use-after-free
+  patterns:
+  - pattern-either:
+    - pattern: $VAR->$ACCESSOR
+    - pattern: (*$VAR).$ACCESSOR
+    - pattern: $VAR[$NUM]
+  - pattern-inside: free($VAR); ...
+  - pattern-not-inside: $VAR = NULL; ...
+  - pattern-not-inside: free($VAR); ... $VAR = malloc(...); ...
+  message: Variable '$VAR' was used after being freed. This can lead to undefined
+    behavior.
+  metadata:
+    cwe:
+    - 'CWE-416: Use After Free'
+    references:
+    - https://cwe.mitre.org/data/definitions/416.html
+    - https://ctf-wiki.github.io/ctf-wiki/pwn/linux/glibc-heap/use_after_free/
+    category: security
+    technology:
+    - c
+    confidence: LOW
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: LOW
+    impact: HIGH
+    license: Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license
+    vulnerability_class:
+    - Memory Issues
+    source: https://semgrep.dev/r/c.lang.security.use-after-free.use-after-free
+    shortlink: https://sg.run/gL6e
+    semgrep.dev:
+      rule:
+        r_id: 8841
+        rv_id: 945178
+        rule_id: KxUb9l
+        version_id: 1QToKPy
+        url: https://semgrep.dev/playground/r/1QToKPy/c.lang.security.use-after-free.use-after-free
+        origin: community
+        path: c.lang.security.use-after-free.use-after-free
+  languages:
+  - c
+  - cpp
+  severity: WARNING
+- id: research.c.unbounded-string-copy
+  languages:
+  - c
+  - cpp
+  severity: ERROR
+  message: Unbounded string copy/concatenation into a fixed-size buffer may overflow.
+  metadata:
+    cwe:
+    - CWE-120
+  pattern-either:
+  - pattern: strcpy($DST, $SRC)
+  - pattern: strcat($DST, $SRC)
+  - pattern: sprintf($DST, ...)
+  - pattern: vsprintf($DST, ...)
+  - pattern: gets($DST)
+- id: research.c.command-execution
+  languages:
+  - c
+  - cpp
+  severity: ERROR
+  message: Command execution with a non-literal argument; verify it is not attacker-controlled.
+  metadata:
+    cwe:
+    - CWE-78
+  pattern-either:
+  - pattern: system($CMD)
+  - pattern: popen($CMD, ...)
+  - pattern: execl($CMD, ...)
+  - pattern: execlp($CMD, ...)
+- id: research.c.allocation-size-multiply
+  languages:
+  - c
+  - cpp
+  severity: WARNING
+  message: Allocation size computed by multiplication; check for integer overflow.
+  metadata:
+    cwe:
+    - CWE-190
+  pattern-either:
+  - pattern: malloc($A * $B)
+  - pattern: calloc($A, $B)
+- id: research.c.unchecked-allocation-deref
+  languages:
+  - c
+  - cpp
+  severity: WARNING
+  message: Allocation result is dereferenced without an obvious NULL check.
+  metadata:
+    cwe:
+    - CWE-476
+  patterns:
+  - pattern: $PTR = malloc(...);
+  - pattern: $PTR->$FIELD

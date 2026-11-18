@@ -1,6 +1,6 @@
 project_name: vulntriage
 decision_threshold: 0.5
-prompt_version: v1
+prompt_version: v3
 
 paths:
   raw_data_dir: data/raw

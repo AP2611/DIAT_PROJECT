@@ -188,7 +188,11 @@ def vd_s_metrics(
     fnr = _safe_div(cm["fn"], cm["fn"] + cm["tp"])
     return {"vd_s": fnr, "target_fpr": target_fpr,
             "achieved_fpr": achieved_fpr, "threshold": threshold,
-            "note": "Observed thresholds only; at n=10 the 0.5% FPR operating point is highly coarse."}
+            "n": len(y_true),
+            "note": (
+                f"Observed thresholds only; at n={len(y_true)} the 0.5% FPR "
+                "operating point is highly coarse."
+            )}
 
 
 def latency_stats(values: Sequence[float]) -> dict[str, float | None]:
@@ -260,8 +264,12 @@ def summarize_run(rows: list[dict[str, Any]], *, include_synthetic: bool = False
         for r in successes
         if r.get("latency_seconds") is not None
     ]
-    paper_ok = (not synthetic_only) and n_total > 0 and not all(
-        int(r.get("is_synthetic") or 0) for r in considered
+    # A handful of samples cannot support paper claims even when labels exist.
+    min_paper_n = 100
+    paper_ok = (
+        (not synthetic_only)
+        and n_total >= min_paper_n
+        and not all(int(r.get("is_synthetic") or 0) for r in considered)
     )
     return {
         "n_rows": n_total,
@@ -279,10 +287,16 @@ def summarize_run(rows: list[dict[str, Any]], *, include_synthetic: bool = False
         "synthetic_only": synthetic_only,
         "include_synthetic": include_synthetic,
         "suitable_for_paper": paper_ok and not synthetic_only,
+        "min_paper_n": min_paper_n,
         "caveat": (
             "Synthetic smoke samples must not be reported as scientific benchmark results."
             if synthetic_only
-            else None
+            else (
+                f"Pilot only (n={n_total}); at least {min_paper_n} labelled samples "
+                "are required before treating results as paper-ready."
+                if not paper_ok
+                else None
+            )
         ),
     }
 

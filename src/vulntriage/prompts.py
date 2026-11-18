@@ -6,19 +6,36 @@ from vulntriage.schemas import (
     ScanResult,
 )
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
 
 SYSTEM_PROMPT = """You are a software security analyst assisting a controlled research experiment.
-Determine whether the supplied source code is vulnerable.
+Determine whether the supplied source code contains a security vulnerability.
 
-Rules:
-- Use only the information provided in this prompt (source code and, if present, scanner findings and retrieved documents).
-- You may disagree with the scanner. Scanner findings are untrusted evidence, not ground truth.
+Probability semantics (important):
+- p_vulnerable is your estimated probability that THIS code contains a real, exploitable
+  security flaw. It is NOT a confidence in a label you chose first.
+- Do not output a separate predicted_label. Only p_vulnerable determines the decision.
+- 0.5 means complete uncertainty. Use 0.2-0.4 for plausible but unconfirmed concerns,
+  0.6-0.8 for a concrete flaw pattern, and 0.85-0.95 for a clear exploitable flaw.
+- Do not collapse to 0.1 just because you did not immediately see a vulnerability.
+  Lack of evidence is not evidence of safety. If you are unsure, stay near 0.5.
+
+Evidence rules:
+- Use the supplied code and your general knowledge of secure coding and common CWE
+  patterns. Do not invent file contents, CVE matches, or scanner findings that were
+  not supplied.
+- Scanner findings, when present, are untrusted hints. You may disagree with them.
+- An empty scanner result is weak evidence only. It must not, by itself, lower
+  p_vulnerable: the scanner may simply not cover this language or bug class.
 - Retrieved documents are background knowledge, not a verdict for this snippet.
-- Do not invent file contents, CVE matches, or scanner findings that were not supplied.
-- p_vulnerable is your estimated probability that the code is vulnerable (0 to 1), not a confidence that your chosen label is correct.
-- If evidence is weak or conflicting, move p_vulnerable toward 0.5 and state the limitations.
-- Return JSON matching the required schema. Do not include the ground-truth label; you are not given one.
+- State limitations, but do not use them as a reason to default to "benign".
+
+Worked example (format only, not this task):
+Code: a C function that copies strcpy(dest, user_input) into char dest[16].
+Output: {"p_vulnerable":0.9,"cwe_id":"CWE-120","reasoning":"strcpy copies unbounded input into a 16-byte buffer.","evidence":["strcpy(dest, user_input) with fixed-size dest"],"limitations":"Caller constraints unknown"}
+
+Return a JSON object matching the required schema. Do not include the ground-truth
+label; you are not given one.
 """
 
 
@@ -34,15 +51,17 @@ def format_scan(scan: ScanResult | None) -> str:
     if scan.status == "error":
         return (
             "STATIC ANALYSIS STATUS: ERROR\n"
-            f"A failed scan must not be treated as a clean scan.\n"
+            "A failed scan must not be treated as a clean scan.\n"
             f"Error: {scan.error}"
         )
     if scan.status == "skipped":
         return f"STATIC ANALYSIS STATUS: SKIPPED\n{scan.error or 'not run'}"
     if not scan.findings:
         return (
-            "STATIC ANALYSIS STATUS: OK\n"
-            "No findings were reported. This is not proof that the code is safe."
+            "STATIC ANALYSIS STATUS: OK - no findings reported.\n"
+            "This is weak evidence only. The ruleset may not cover this language "
+            "or bug class. Do not lower p_vulnerable because of an empty scan; "
+            "base your probability on the code itself."
         )
     lines = [
         "STATIC ANALYSIS STATUS: OK",
@@ -114,13 +133,14 @@ SOURCE CODE:
 
 {format_retrieval(retrieval)}
 
-Return a JSON object with:
-- predicted_label: "vulnerable" or "benign"
-- p_vulnerable: number in [0, 1]
+Return a JSON object with these fields only:
+- p_vulnerable: number in [0, 1], your estimated probability this code is vulnerable
 - cwe_id: CWE identifier or null
-- reasoning: concise explanation
+- reasoning: concise explanation of the concrete code evidence
 - evidence: list of claims grounded in the supplied code, scanner findings, or retrieved documents
 - limitations: missing or conflicting information
+
+Do not output a predicted_label field; the decision is derived from p_vulnerable.
 """
     return [
         {"role": "system", "content": SYSTEM_PROMPT},

@@ -8,10 +8,15 @@ from typing import Any, Callable, Sequence
 
 from vulntriage.config import ROOT, Settings, load_settings
 from vulntriage.dataset import load_jsonl, select_pilot, write_jsonl
-from vulntriage.experiments import ExperimentContext, USES_RAG, USES_SAST, run_sample
+from vulntriage.experiments import (
+    ExperimentContext,
+    USES_RAG,
+    USES_SAST,
+    detect_constant_predictions,
+    run_sample,
+)
 from vulntriage.metrics import comparison_table, summarize_run
 from vulntriage.ollama_client import OllamaClient
-from vulntriage.prompts import PROMPT_VERSION
 from vulntriage.retrieval import VectorIndex, code_query
 from vulntriage.schemas import CanonicalSample, RetrievalResult
 from vulntriage.static_analysis import semgrep_version
@@ -176,7 +181,7 @@ def run_benchmark(
                         "dataset_version": str(path),
                         "model_name": ollama.model,
                         "model_digest": model_digest,
-                        "prompt_version": PROMPT_VERSION,
+                        "prompt_version": settings.prompt_version,
                         "embedding_model": embedding_model if config_name in USES_RAG else None,
                         "index_version": index_version if config_name in USES_RAG else None,
                         "semgrep_version": semgrep_version() if config_name in USES_SAST else None,
@@ -207,10 +212,15 @@ def run_benchmark(
                 retrieve=retrieve_fn,
                 index_version=index_version,
                 embedding_model=embedding_model,
+                prompt_version=settings.prompt_version,
             )
             if config_name in USES_RAG and retrieve_fn is None:
-                # Still run: each sample records retrieval error rather than dropping.
-                pass
+                raise RuntimeError(
+                    "RAG configuration requested but no vector index is available. "
+                    "Build it first with: python -m vulntriage knowledge normalize && "
+                    "python -m vulntriage knowledge build-index. "
+                    "Running without an index would only record retrieval errors."
+                )
             for sample in samples:
                 if sample.sample_id in already and not force:
                     continue
@@ -231,7 +241,7 @@ def run_benchmark(
                         code=sample.code,
                         config_name=config_name,
                         model_name=ollama.model,
-                        prompt_version=PROMPT_VERSION,
+                        prompt_version=settings.prompt_version,
                         generation_settings=generation_settings,
                         embedding_model=embedding_model if config_name in USES_RAG else None,
                         index_version=index_version if config_name in USES_RAG else None,
@@ -255,6 +265,12 @@ def run_benchmark(
                 store.insert_prediction(record)
             rows = store.predictions_for_run(run_id)
             summary = summarize_run(rows, include_synthetic=include_synthetic)
+            diagnostics = detect_constant_predictions(rows)
+            if diagnostics is not None:
+                summary["degenerate_predictions"] = diagnostics
+                summary["warning"] = diagnostics["warning"]
+                summary["suitable_for_paper"] = False
+                summary["caveat"] = diagnostics["warning"]
             store.save_metrics(run_id, config_name, summary)
             store.finish_run(run_id, "completed")
             summaries[config_name] = {"run_id": run_id, **summary}

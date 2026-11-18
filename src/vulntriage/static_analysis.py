@@ -48,6 +48,41 @@ def _extract_cwes(metadata: dict[str, Any] | None) -> list[str]:
     return out
 
 
+def _infer_suffix(language_hint: str | None, file_name: str | None = None) -> str:
+    """Infer the file extension for Semgrep scanning from language hint or file name."""
+    hint = (language_hint or "").lower()
+    if hint == "c":
+        return ".c"
+    if hint in {"cpp", "c++"}:
+        return ".cpp"
+    if hint in {"javascript", "js"}:
+        return ".js"
+    if hint in {"java"}:
+        return ".java"
+    if hint in {"go"}:
+        return ".go"
+    if hint in {"python", "py"}:
+        return ".py"
+    # Fall back to file name extension when language hint is missing or unknown.
+    if file_name:
+        from pathlib import Path
+
+        suffix = Path(str(file_name)).suffix.lower()
+        if suffix in {".c", ".h"}:
+            return ".c"
+        if suffix in {".cc", ".cpp", ".cxx", ".hpp"}:
+            return ".cpp"
+        if suffix in {".py"}:
+            return ".py"
+        if suffix in {".js"}:
+            return ".js"
+        if suffix in {".java"}:
+            return ".java"
+        if suffix in {".go"}:
+            return ".go"
+    return ".c"
+
+
 def parse_semgrep_json(payload: dict[str, Any], *, config: str | None = None) -> ScanResult:
     findings: list[SemgrepFinding] = []
     for item in payload.get("results") or []:
@@ -91,6 +126,7 @@ def scan_code(
     *,
     config: str | Path,
     language_hint: str | None = None,
+    file_name: str | None = None,
     timeout_seconds: float = 60.0,
     executable: str | None = None,
 ) -> ScanResult:
@@ -103,16 +139,7 @@ def scan_code(
             config=config_path,
             error="semgrep executable not found on PATH",
         )
-    suffix = ".py"
-    hint = (language_hint or "").lower()
-    if hint in {"javascript", "js"}:
-        suffix = ".js"
-    elif hint in {"c", "cpp", "c++"}:
-        suffix = ".c"
-    elif hint in {"java"}:
-        suffix = ".java"
-    elif hint in {"go"}:
-        suffix = ".go"
+    suffix = _infer_suffix(language_hint, file_name)
     with tempfile.TemporaryDirectory(prefix="vulntriage-semgrep-") as tmp:
         target = Path(tmp) / f"sample{suffix}"
         target.write_text(code, encoding="utf-8")
