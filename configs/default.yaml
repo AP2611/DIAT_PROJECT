@@ -1,4 +1,6 @@
 project_name: vulntriage
+# Default model provider. Override with VULNTRIAGE_PROVIDER or `benchmark run --provider`.
+provider: ollama
 decision_threshold: 0.5
 prompt_version: v3
 
@@ -10,6 +12,14 @@ paths:
   results_dir: results
   sqlite_path: results/experiments.sqlite
   research_dir: research
+
+# Hosted provider (API key is read from GEMINI_API_KEY / .env, never from YAML)
+gemini:
+  model: gemini-3.1-flash-lite
+  base_url: https://generativelanguage.googleapis.com/v1beta
+  temperature: 0
+  max_output_tokens: 1024
+  timeout_seconds: 120
 
 ollama:
   url: http://localhost:11434

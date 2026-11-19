@@ -85,3 +85,26 @@ Score distributions are now varied: `llm_only` 0.2×5, 0.3×1, 0.6×2; `llm_sast
 The new `configs/semgrep.yml` includes vetted C rules from Semgrep's `p/security-audit` pack plus local high-signal C/C++ patterns. It still yields 0 findings on these 8 specific snippets, but it produced findings on 2 of the first 30 validation samples (and scan parse failures are still retained as failures, not "clean"). Crucially, with the prompt fixed, an empty scan no longer suppresses a correct vulnerability judgment.
 
 All 36 unit tests pass. RAG configs now fail fast with a clear message until a Qdrant index is built, instead of silently recording retrieval errors.
+
+---
+
+## Gemini API 8-sample check (2026-11-19)
+
+Provider: `gemini` via `GeminiClient`; model `gemini-3.1-flash-lite` (free tier; the configured `gemini-2.5-flash` is retired for new users and `gemini-3.8-flash` returned 503). Native structured JSON output, same prompt `v3`, same 8 samples, `--force`. Runs: `90780440aa56` (`llm_only`), `abd4e3436b54` (`llm_sast`). 8/8 successful in both; no scanner or retrieval failures.
+
+| Metric | Gemini `llm_only` | Gemini `llm_sast` | Mistral `llm_only` (post-fix) | Mistral `llm_sast` (post-fix) |
+|---|---:|---:|---:|---:|
+| TP / FP / TN / FN | 2 / 1 / 3 / 2 | 2 / 1 / 3 / 2 | 2 / 0 / 4 / 2 | 2 / 0 / 4 / 2 |
+| Precision | 0.667 | 0.667 | 1.000 | 1.000 |
+| Recall | 0.500 | 0.500 | 0.500 | 0.500 |
+| F1 | 0.571 | 0.571 | 0.667 | 0.667 |
+| Accuracy | 0.625 | 0.625 | 0.750 | 0.750 |
+| MCC | 0.258 | 0.258 | 0.577 | 0.577 |
+| AUROC | 0.688 | 0.719 | 0.875 | 0.906 |
+| AUPRC | 0.775 | 0.813 | 0.875 | 0.893 |
+| Brier | 0.208 | 0.207 | 0.201 | 0.198 |
+| ECE | 0.188 | 0.213 | 0.188 | 0.225 |
+| VD-S (n=8, coarse) | 0.500 | 0.500 | 0.250 | 0.250 |
+| Mean latency (s) | 3.1 | 2.5 | 11.0 | 11.1 |
+
+**Interpretation:** on this 8-sample chunk, Gemini Flash-Lite did **not** beat the fixed Mistral setup on detection or ranking — it matched recall (0.50) but added one false positive, lowering precision/MCC/AUPRC. Brier/ECE are comparable. Its clear advantages were operational: ~3 s vs ~11 s latency, no local daemon to crash, and native schema-constrained JSON. This is still an n=8 pilot with only 4 positives, so no performance conclusion should be drawn from either model. The next step is the 50-sample test-split run on Gemini.

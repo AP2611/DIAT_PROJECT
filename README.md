@@ -76,6 +76,10 @@ Defaults live in `configs/default.yaml`. Environment overrides are in `.env.exam
 - `VULNTRIAGE_TOP_K`
 - `VULNTRIAGE_DECISION_THRESHOLD` (default `0.5`)
 - `VULNTRIAGE_RAW_DATA_DIR`
+- `VULNTRIAGE_PROVIDER` (`ollama` or `gemini`; can also be set with `benchmark run --provider`)
+- `VULNTRIAGE_GEMINI_MODEL` (default `gemini-3.1-flash-lite`) and `GEMINI_API_KEY` (read from `.env`, never from YAML)
+
+`.env` is loaded automatically at startup and is gitignored. Gemini uses native JSON-schema structured output; all four configs remain identical apart from the evidence source.
 
 Generation temperature is **0**. The binary label is **derived** from `p_vulnerable >= 0.5`, not from the model's free-text label. `decision_confidence = max(p_vulnerable, 1 - p_vulnerable)` is recorded separately and is **not** treated as calibrated confidence.
 

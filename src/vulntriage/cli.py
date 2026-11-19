@@ -229,6 +229,9 @@ def benchmark_run(
         "--config",
         help="llm_only | llm_sast | llm_rag | llm_sast_rag | all",
     ),
+    provider: Optional[str] = typer.Option(
+        None, "--provider", help="ollama | gemini (default: VULNTRIAGE_PROVIDER)"
+    ),
     limit: Optional[int] = typer.Option(20, help="Pilot size. Omit large runs accidentally."),
     seed: int = typer.Option(42),
     split: Optional[str] = typer.Option(None),
@@ -244,6 +247,7 @@ def benchmark_run(
         configs = (config_name,)
     result = run_benchmark(
         configs=configs,
+        provider=provider,
         dataset_path=dataset,
         limit=limit,
         seed=seed,

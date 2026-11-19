@@ -15,6 +15,7 @@ from vulntriage.experiments import (
     detect_constant_predictions,
     run_sample,
 )
+from vulntriage.gemini_client import GeminiClient
 from vulntriage.metrics import comparison_table, summarize_run
 from vulntriage.ollama_client import OllamaClient
 from vulntriage.retrieval import VectorIndex, code_query
@@ -115,7 +116,8 @@ def run_benchmark(
     force: bool = False,
     reuse_cache: bool = True,
     settings: Settings | None = None,
-    client: OllamaClient | None = None,
+    client: Any | None = None,
+    provider: str | None = None,
     retriever: Callable[[CanonicalSample], RetrievalResult] | None = None,
     embedder_factory: Callable[[], Any] | None = None,
     notes: str | None = None,
@@ -133,21 +135,29 @@ def run_benchmark(
     if not samples:
         raise RuntimeError(f"No samples loaded from {path}")
 
-    ollama = client or OllamaClient(
-        url=settings.ollama.url,
-        model=settings.ollama.model,
-        temperature=settings.ollama.temperature,
-        num_ctx=settings.ollama.num_ctx,
-        num_predict=settings.ollama.num_predict,
-        timeout_seconds=settings.ollama.timeout_seconds,
-        use_json_schema=settings.ollama.use_json_schema,
-    )
+    provider = provider or settings.provider
+    if client is None:
+        if provider == "gemini":
+            client = GeminiClient.from_settings(settings)
+        elif provider == "ollama":
+            client = OllamaClient(
+                url=settings.ollama.url,
+                model=settings.ollama.model,
+                temperature=settings.ollama.temperature,
+                num_ctx=settings.ollama.num_ctx,
+                num_predict=settings.ollama.num_predict,
+                timeout_seconds=settings.ollama.timeout_seconds,
+                use_json_schema=settings.ollama.use_json_schema,
+            )
+        else:
+            raise ValueError(f"Unknown provider {provider!r}; expected 'ollama' or 'gemini'")
     model_digest = None
     try:
-        health = ollama.health()
+        health = client.health()
         model_digest = str(
             (health.get("model_details") or {}).get("digest")
             or health.get("version")
+            or client.model
         )
     except Exception:
         health = None
@@ -179,7 +189,8 @@ def run_benchmark(
                         "config_name": config_name,
                         "dataset_name": path.name,
                         "dataset_version": str(path),
-                        "model_name": ollama.model,
+                        "provider": provider,
+                        "model_name": client.model,
                         "model_digest": model_digest,
                         "prompt_version": settings.prompt_version,
                         "embedding_model": embedding_model if config_name in USES_RAG else None,
@@ -187,10 +198,10 @@ def run_benchmark(
                         "semgrep_version": semgrep_version() if config_name in USES_SAST else None,
                         "semgrep_config": settings.semgrep.config if config_name in USES_SAST else None,
                         "generation_settings": {
-                            "temperature": ollama.temperature,
-                            "num_ctx": ollama.num_ctx,
-                            "num_predict": ollama.num_predict,
-                            "use_json_schema": ollama.use_json_schema,
+                            "temperature": client.temperature,
+                            "num_ctx": client.num_ctx,
+                            "num_predict": client.num_predict,
+                            "use_json_schema": client.use_json_schema,
                             "threshold": settings.decision_threshold,
                             "seed": seed,
                             "limit": limit,
@@ -204,7 +215,7 @@ def run_benchmark(
             already = store.existing_sample_ids(run_id)
             ctx = ExperimentContext(
                 config_name=config_name,
-                client=ollama,
+                client=client,
                 decision_threshold=settings.decision_threshold,
                 max_code_chars=settings.max_code_chars,
                 semgrep_config=str(settings.resolve(settings.semgrep.config)),
@@ -231,16 +242,16 @@ def run_benchmark(
                     from vulntriage.storage import make_cache_key
 
                     generation_settings = {
-                        "temperature": ollama.temperature,
-                        "num_ctx": ollama.num_ctx,
-                        "num_predict": ollama.num_predict,
-                        "use_json_schema": ollama.use_json_schema,
+                        "temperature": client.temperature,
+                        "num_ctx": client.num_ctx,
+                        "num_predict": client.num_predict,
+                        "use_json_schema": client.use_json_schema,
                     }
                     cache_key = make_cache_key(
                         sample_id=sample.sample_id,
                         code=sample.code,
                         config_name=config_name,
-                        model_name=ollama.model,
+                        model_name=client.model,
                         prompt_version=settings.prompt_version,
                         generation_settings=generation_settings,
                         embedding_model=embedding_model if config_name in USES_RAG else None,

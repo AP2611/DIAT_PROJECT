@@ -10,6 +10,20 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _load_dotenv(path: Path) -> None:
+    """Load KEY=VALUE pairs from .env without overriding real environment variables."""
+    if not path.exists():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if key and value:
+            os.environ.setdefault(key, value)
+
+
 class OllamaSettings(BaseModel):
     url: str = "http://localhost:11434"
     model: str = "mistral"
@@ -18,6 +32,15 @@ class OllamaSettings(BaseModel):
     num_predict: int = 1024
     timeout_seconds: float = 180.0
     use_json_schema: bool = True
+
+
+class GeminiSettings(BaseModel):
+    model: str = "gemini-3.1-flash-lite"
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    api_key: str = ""
+    temperature: float = 0.0
+    max_output_tokens: int = 1024
+    timeout_seconds: float = 120.0
 
 
 class EmbeddingsSettings(BaseModel):
@@ -45,10 +68,12 @@ class PathsSettings(BaseModel):
 
 class Settings(BaseModel):
     project_name: str = "vulntriage"
+    provider: str = "ollama"
     decision_threshold: float = 0.5
     prompt_version: str = "v1"
     paths: PathsSettings = Field(default_factory=PathsSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
+    gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings)
     semgrep: SemgrepSettings = Field(default_factory=SemgrepSettings)
     max_code_chars: int = 8000
@@ -73,6 +98,7 @@ def _deep_update(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_settings(config_path: str | Path | None = None) -> Settings:
+    _load_dotenv(ROOT / ".env")
     path = Path(config_path) if config_path else ROOT / "configs" / "default.yaml"
     data: dict[str, Any] = {}
     if path.exists():
@@ -87,7 +113,17 @@ def load_settings(config_path: str | Path | None = None) -> Settings:
         if "default_seed" in benchmark:
             data["default_seed"] = benchmark["default_seed"]
 
-    env_overlay: dict[str, Any] = {"ollama": {}, "paths": {}, "embeddings": {}, "semgrep": {}}
+    env_overlay: dict[str, Any] = {
+        "ollama": {}, "gemini": {}, "paths": {}, "embeddings": {}, "semgrep": {}
+    }
+    if os.getenv("VULNTRIAGE_PROVIDER"):
+        data["provider"] = os.environ["VULNTRIAGE_PROVIDER"]
+    if os.getenv("VULNTRIAGE_GEMINI_MODEL"):
+        env_overlay["gemini"]["model"] = os.environ["VULNTRIAGE_GEMINI_MODEL"]
+    if os.getenv("VULNTRIAGE_GEMINI_BASE_URL"):
+        env_overlay["gemini"]["base_url"] = os.environ["VULNTRIAGE_GEMINI_BASE_URL"]
+    if os.getenv("GEMINI_API_KEY"):
+        env_overlay["gemini"]["api_key"] = os.environ["GEMINI_API_KEY"]
     if os.getenv("VULNTRIAGE_OLLAMA_URL"):
         env_overlay["ollama"]["url"] = os.environ["VULNTRIAGE_OLLAMA_URL"]
     if os.getenv("VULNTRIAGE_OLLAMA_MODEL"):
